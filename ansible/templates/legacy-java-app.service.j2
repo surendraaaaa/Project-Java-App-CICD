@@ -1,0 +1,13 @@
+[Unit]
+Description=Spring Boot Application - {{ app_name }}
+After=network.target
+
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/java -jar {{ deploy_dir }}/{{ jar_file }}
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

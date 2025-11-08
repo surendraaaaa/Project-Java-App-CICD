@@ -1,0 +1,12 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-2
+  - us-east-1
+filters:
+  "tag:App": "legacy-java-app"
+hostnames:
+  - public-ip-address
+compose:
+  ansible_user: ubuntu
+  ansible_ssh_private_key_file: /home/ubuntu/.ssh/legacy-java-app-key
+

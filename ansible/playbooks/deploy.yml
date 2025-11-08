@@ -1,0 +1,49 @@
+---
+- name: Deploy Java App
+  hosts: all
+  become: yes
+  vars_files:
+    - ../vars/main.yml
+
+  tasks:
+
+    - name: Create deployment directory
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: 0755
+
+    - name: Download latest JAR from S3
+      shell: >
+        aws s3 cp s3://{{ s3_bucket }}/artifacts/{{ jar_file }}
+        {{ deploy_dir }}/{{ jar_file }}
+      args:
+        creates: "{{ deploy_dir }}/{{ jar_file }}"
+
+    - name: Deploy systemd service template
+      template:
+        src: legacy-java-app.service.j2
+        dest: /etc/systemd/system/{{ systemd_service }}
+      notify: Reload systemd
+
+    - name: Start and enable app service
+      systemd:
+        name: "{{ systemd_service }}"
+        state: restarted
+        enabled: yes
+
+    - name: Wait for /health endpoint to respond
+      uri:
+        url: "http://{{ ansible_host }}:8080/health"
+        status_code: 200
+        return_content: no
+        timeout: 10
+        retries: 5
+        delay: 5
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes

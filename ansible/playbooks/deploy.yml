@@ -22,6 +22,7 @@
         dest: "/tmp/{{ jar_file }}"
         mode: get
       delegate_to: localhost
+      become: false
 
     - name: Copy JAR to EC2
       copy:

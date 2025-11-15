@@ -47,8 +47,11 @@
         status_code: 200
         return_content: no
         timeout: 10
-        retries: 5
-        delay: 5
+      register: healthcheck
+      until: healthcheck.status == 200
+      retries: 5
+      delay: 5
+
 
   handlers:
     - name: Reload systemd

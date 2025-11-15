@@ -19,7 +19,7 @@ def generate_inventory(instances):
             inventory["_meta"]["hostvars"][ip] = {
                 "ansible_connection": "ssh",
                 "ansible_user": "ubuntu",
-                "ansible_ssh_private_key_file": "/home/ubuntu/.ssh/legacy-java-app-key"
+                "ansible_ssh_private_key_file": "/var/lib/jenkins/.ssh/legacy-java-app-key"
             }
 
     return inventory

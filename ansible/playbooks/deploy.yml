@@ -15,12 +15,18 @@
         group: ubuntu
         mode: 0755
 
-    - name: Download latest JAR from S3
-      shell: >
-        aws s3 cp s3://{{ s3_bucket }}/artifacts/{{ jar_file }}
-        {{ deploy_dir }}/{{ jar_file }}
-      args:
-        creates: "{{ deploy_dir }}/{{ jar_file }}"
+    - name: Download latest JAR from S3 (control node)
+      amazon.aws.s3_object:
+        bucket: "{{ s3_bucket }}"
+        object: "artifacts/{{ jar_file }}"
+        dest: "/tmp/{{ jar_file }}"
+        mode: get
+      delegate_to: localhost
+
+    - name: Copy JAR to EC2
+      copy:
+        src: "/tmp/{{ jar_file }}"
+        dest: "{{ deploy_dir }}/{{ jar_file }}"
 
     - name: Deploy systemd service template
       template:

@@ -28,8 +28,9 @@ def main():
     region = os.environ.get("AWS_REGION", "us-east-2")
     ec2 = boto3.client("ec2", region_name=region)
     response = ec2.describe_instances(
-        Filters=[{"Name": "tag:App", "Values": ["legacy-java-app"]}]
-    )
+    Filters=[{"Name": "tag:app", "Values": ["legacy-java-app"]}]
+)
+
     inventory = generate_inventory(response["Reservations"])
     print(json.dumps(inventory, indent=4))
 

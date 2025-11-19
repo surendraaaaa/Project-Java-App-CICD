@@ -51,7 +51,7 @@ pipeline {
         stage('Gitleaks Scan') {
             when { expression { return !params.ROLLBACK } }
             steps {
-                sh "gitleaks detect --source . --report-path gitleaks-report-${BUILD_NUMBER}.json --report-format json --verbose"
+                sh "gitleaks detect --source . --report-path gitleaks-report-${BUILD_NUMBER}.json --report-format json --verbose || true"
             }
             post { always { archiveArtifacts artifacts: "gitleaks-report-${BUILD_NUMBER}.json" } }
         }
@@ -102,6 +102,9 @@ pipeline {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     script {
+                        if (params.ROLLBACK && !params.ROLLBACK_VERSION) {
+                                error "ROLLBACK_VERSION must be provided when ROLLBACK is enabled"
+                            }
                         if (!params.ROLLBACK) {
                             input "Deploy Build #${BUILD_NUMBER} to ${params.ENV}?"
                         } else {

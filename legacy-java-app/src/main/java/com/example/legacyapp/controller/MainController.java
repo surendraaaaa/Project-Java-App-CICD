@@ -9,7 +9,7 @@ public class MainController {
 
     @GetMapping("/")
     public String home() {
-        return "Legacy Java App is running successfully! Deployed at: " + Instant.now();
+        return "This is newer version of the app!! Legacy Java App is running successfully! Deployed at: " + Instant.now();
     }
 
     @GetMapping("/health")

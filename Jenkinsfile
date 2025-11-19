@@ -11,7 +11,7 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
-        SONAR_HOST_URL = "http://3.12.196.109:9000"
+        SONAR_HOST_URL = "http://3.16.41.87:9000"
     }
 
     stages {
@@ -23,7 +23,7 @@ pipeline {
 
         stage('Git Checkout') {
             when { expression { return !params.ROLLBACK } }
-            steps { git branch: 'main', url: 'https://github.com/surendraaaaa/Project-Java-App-CICD.git' }
+            steps { git branch: 'feature', url: 'https://github.com/surendraaaaa/Project-Java-App-CICD.git' }
         }
 
         stage('Maven Build & Package') {

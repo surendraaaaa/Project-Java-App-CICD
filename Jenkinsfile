@@ -120,24 +120,4 @@ pipeline {
     }
 }
 
-// // params text(name: 'EC2_REGIONS', defaultValue: 'us-east-1,us-east-2', description: 'Comma-separated list of EC2 regions to deploy to')
- 
-// // ec2 stage 
-// // def ec2Regions = params.EC2_REGIONS.split(',')  // Split the input into a list
 
-// // for (region in ec2Regions) {
-// //     stage("Deploy to EC2 in ${region}") {
-// //         steps {
-//             withAWS(credentials: 'aws-cred', region: params.REGION) {
-// //             withEnv(["AWS_REGION=${region.trim()}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
-// //                 dir("${WORKSPACE}/ansible") {
-// //                     sh """
-// //                     ansible-playbook -i inventories/${params.ENV}/ec2.py playbooks/deploy.yml \
-// //                     --extra-vars "artifact_version=${params.ROLLBACK ? params.ROLLBACK_VERSION : BUILD_NUMBER} env=${params.ENV} aws_region=${region.trim()}"
-// //                     """
-// //                 }
-// //             }
-//             }
-// //         }
-// //     }
-// // }

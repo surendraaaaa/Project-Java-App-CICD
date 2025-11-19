@@ -1,48 +1,34 @@
 pipeline {
     agent any
+
+    parameters {
+        choice(name: 'ENV', choices: ['dev', 'staging', 'prod'], description: 'Choose Environment to Deploy')
+        booleanParam(name: 'ROLLBACK', defaultValue: false, description: 'Enable rollback instead of new deployment?')
+        string(name: 'ROLLBACK_VERSION', defaultValue: '', description: 'Provide version (Build Number) to rollback to')
+        choice(name: 'REGION', choices: ['us-east-1', 'us-east-2', 'us-west-1', 'eu-west-1'], description: 'Choose AWS Region')
+    }
+
     environment {
-        SCANNER_HOME= tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'
         SONAR_HOST_URL = "http://3.12.196.109:9000"
-        }
+        
+        
+    }
+
     stages {
 
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            when { expression { return !params.ROLLBACK } }
+            steps { cleanWs() }
         }
 
         stage('Git Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/surendraaaaa/Project-Java-App-CICD.git'
-            }
+            when { expression { return !params.ROLLBACK } }
+            steps { git branch: 'main', url: 'https://github.com/surendraaaaa/Project-Java-App-CICD.git' }
         }
 
-        stage('Maven Validate') {
-            steps {
-                dir('legacy-java-app') {
-                    sh 'mvn validate'
-                }
-            }
-        }
-
-        stage('Maven Compile') {
-            steps {
-                dir('legacy-java-app') {
-                    sh 'mvn compile'
-                }
-            }
-        }
-
-        stage('Maven Package') {
-            steps {
-                dir('legacy-java-app') {
-                    sh 'mvn package'
-                }
-            }
-        }
-
-        stage('Maven Install') {
+        stage('Maven Build & Package') {
+            when { expression { return !params.ROLLBACK } }
             steps {
                 dir('legacy-java-app') {
                     sh 'mvn clean install -DskipTests'
@@ -55,160 +41,103 @@ pipeline {
             }
         }
 
-        stage('Trivy FS Scan') {
+        stage('Security Scans') {
+            when { expression { return !params.ROLLBACK } }
             steps {
                 sh "trivy fs --format table -o fs-report.html ."
+                sh "gitleaks detect --source . --report-path gitleaks-report.json --report-format json --verbose"
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'fs-report.html', fingerprint: true
+                    archiveArtifacts artifacts: 'fs-report.html'
+                    archiveArtifacts artifacts: 'gitleaks-report.json'
                 }
             }
         }
-        
-        stage('GitLeaks Secret Scan') {
-            steps {
-                sh '''
-                gitleaks detect --source . --report-path gitleaks-report.json --report-format json --verbose
-                '''
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'gitleaks-report.json', fingerprint: true
-                }
-                failure {
-                    error("Gitleaks detected secrets! Pipeline failed.")
-                }
-            }
-        }
-
-
 
         stage('Sonar Scan') {
+            when { expression { return !params.ROLLBACK } }
             steps {
                 dir('legacy-java-app') {
                     withSonarQubeEnv('sonar') {
-                        // sh " $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=devops -Dsonar.projectName=devops"
                         sh """
                         $SCANNER_HOME/bin/sonar-scanner \
                         -Dsonar.projectKey=devops \
-                        -Dsonar.projectName=devops \
                         -Dsonar.sources=src/main/java \
                         -Dsonar.java.binaries=target/classes
-                         """
+                        """
                     }
                 }
             }
         }
-        
+
         stage('Upload Artifact & Reports to S3') {
-             steps {
-        withAWS(credentials: 'aws-cred', region: 'us-east-2') {
-            // Inject your custom Sonar token here
-            withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                sh '''
-                aws s3 cp legacy-java-app/target/legacy-java-app-1.0.0.jar s3://project1-javaapp-artifact-bucket/artifacts/
-                aws s3 cp fs-report.html s3://project1-javaapp-artifact-bucket/trivy/
-                aws s3 cp gitleaks-report.json s3://project1-javaapp-artifact-bucket/gitleaks/
+            when { expression { return !params.ROLLBACK } }
+            steps {
+                script {
+                    // Generate S3 bucket dynamically based on selected region
+                    env.S3_BUCKET = "project1-javaapp-bucket-${params.REGION}"
+                }
 
-                # Use the injected variable SONAR_TOKEN
-                curl -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/issues/search?componentKeys=devops" -o sonar-report.json
-
-                aws s3 cp sonar-report.json s3://project1-javaapp-artifact-bucket/sonar/
-                '''
+                withAWS(credentials: 'aws-cred', region: params.REGION) {
+                    sh """
+                    aws s3 cp legacy-java-app/target/legacy-java-app-1.0.0.jar \
+                    s3://${S3_BUCKET}/artifacts/build-${BUILD_NUMBER}.jar
+                    """
+                }
             }
         }
-    }
-}
-        stage('Approval: Deploy to EC2') 
-            { steps 
-                { timeout(time: 10, unit: 'MINUTES')
-                { input message: "Proceed with deployment to EC2?" } 
-                } 
-            }
-            
-        stage('Deploy to EC2 via Ansible') {
+
+
+        stage('Approval Before Deployment') {
             steps {
-                withAWS(credentials: 'aws-cred', region: 'us-east-2') {
-                    withEnv(["ANSIBLE_HOST_KEY_CHECKING=False"]) {
-                        dir("${WORKSPACE}/ansible") {
-                            sh '''
-                            ansible-playbook -i inventories/prod/ec2.py playbooks/deploy.yml
-                            '''
+                timeout(time: 10, unit: 'MINUTES') {
+                    script {
+                        if (!params.ROLLBACK) {
+                            input "Deploy Build #${BUILD_NUMBER} to ${params.ENV}?"
+                        } else {
+                            input "Perform rollback of build #${params.ROLLBACK_VERSION} to ${params.ENV}?"
                         }
                     }
                 }
             }
         }
 
-
-}
-    
-        
-        post {
-        success {
-        emailext(
-            subject: "SUCCESS: Jenkins Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-            to: "ashukumavat555@gmail.com",
-            mimeType: 'text/html',
-            body: """
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; background-color: #f6f6f6; color: #333; }
-                    .container { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);}
-                    .header { text-align: center; }
-                    .header h2 { color: #4CAF50; }
-                    .details { margin-top: 20px; }
-                    .details table { width: 100%; border-collapse: collapse; }
-                    .details th, .details td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-                    .footer { margin-top: 30px; font-size: 12px; color: #888; text-align: center; }
-                    a.button { background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; }
-                    a.button:hover { background-color: #45a049; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h2>Pipeline Success</h2>
-                        <p><strong>${env.JOB_NAME} [#${env.BUILD_NUMBER}]</strong></p>
-                    </div>
-                    <div class="details">
-                        <table>
-                            <tr>
-                                <th>Status</th>
-                                <td style="color: #4CAF50;"><strong>SUCCESS</strong></td>
-                            </tr>
-                            <tr>
-                                <th>Build URL</th>
-                                <td><a class="button" href="${env.BUILD_URL}">View Build</a></td>
-                            </tr>
-                            <tr>
-                                <th>Triggered By</th>
-                                <td>${currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')[0]?.userName ?: 'Automated'}</td>
-                            </tr>
-                            <tr>
-                                <th>Start Time</th>
-                                <td>${new Date(currentBuild.startTimeInMillis).format('yyyy-MM-dd HH:mm:ss')}</td>
-                            </tr>
-                            <tr>
-                                <th>End Time</th>
-                                <td>${new Date().format('yyyy-MM-dd HH:mm:ss')}</td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div class="footer">
-                        <p>This is an automated notification from Jenkins CI/CD system.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-
-        )
+        stage('Deploy via Ansible') {
+            steps {
+                withAWS(credentials: 'aws-cred', region: params.REGION) {
+                    withEnv(["AWS_REGION=${params.REGION}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
+                        dir("${WORKSPACE}/ansible") {
+                            sh """
+                            ansible-playbook -i inventories/${params.ENV}/ec2.py playbooks/deploy.yml \
+                            --extra-vars "artifact_version=${params.ROLLBACK ? params.ROLLBACK_VERSION : BUILD_NUMBER} env=${params.ENV} aws_region=${params.REGION}"
+                            """
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-        
-    
-}
+// // params text(name: 'EC2_REGIONS', defaultValue: 'us-east-1,us-east-2', description: 'Comma-separated list of EC2 regions to deploy to')
+ 
+// // ec2 stage 
+// // def ec2Regions = params.EC2_REGIONS.split(',')  // Split the input into a list
+
+// // for (region in ec2Regions) {
+// //     stage("Deploy to EC2 in ${region}") {
+// //         steps {
+//             withAWS(credentials: 'aws-cred', region: params.REGION) {
+// //             withEnv(["AWS_REGION=${region.trim()}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
+// //                 dir("${WORKSPACE}/ansible") {
+// //                     sh """
+// //                     ansible-playbook -i inventories/${params.ENV}/ec2.py playbooks/deploy.yml \
+// //                     --extra-vars "artifact_version=${params.ROLLBACK ? params.ROLLBACK_VERSION : BUILD_NUMBER} env=${params.ENV} aws_region=${region.trim()}"
+// //                     """
+// //                 }
+// //             }
+//             }
+// //         }
+// //     }
+// // }

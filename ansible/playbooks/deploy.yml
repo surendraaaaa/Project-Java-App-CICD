@@ -15,19 +15,19 @@
         group: ubuntu
         mode: 0755
 
-    - name: Download latest JAR from S3 (control node)
+    - name: Download JAR for required version from S3
       amazon.aws.s3_object:
         bucket: "{{ s3_bucket }}"
-        object: "artifacts/{{ jar_file }}"
-        dest: "/tmp/{{ jar_file }}"
+        object: "artifacts/build-{{ artifact_version }}.jar"
+        dest: "/tmp/build-{{ artifact_version }}.jar"
         mode: get
       delegate_to: localhost
       become: false
 
     - name: Copy JAR to EC2
       copy:
-        src: "/tmp/{{ jar_file }}"
-        dest: "{{ deploy_dir }}/{{ jar_file }}"
+        src: "/tmp/build-{{ artifact_version }}.jar"
+        dest: "{{ deploy_dir }}/build-{{ artifact_version }}.jar"
 
     - name: Deploy systemd service template
       template:
@@ -35,25 +35,18 @@
         dest: /etc/systemd/system/{{ systemd_service }}
       notify: Reload systemd
 
-    - name: Start and enable app service
+    - name: Restart service
       systemd:
         name: "{{ systemd_service }}"
         state: restarted
         enabled: yes
 
-    - name: Wait for /health endpoint to respond
+    - name: Wait for /health endpoint
       uri:
         url: "http://{{ ansible_host }}:8080/health"
         status_code: 200
-        return_content: no
-        timeout: 10
+        timeout: 20
       register: healthcheck
       until: healthcheck.status == 200
       retries: 5
       delay: 5
-
-
-  handlers:
-    - name: Reload systemd
-      systemd:
-        daemon_reload: yes

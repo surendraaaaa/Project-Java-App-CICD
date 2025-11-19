@@ -4,10 +4,12 @@ After=network.target
 
 [Service]
 User=ubuntu
-ExecStart=/usr/bin/java -jar {{ deploy_dir }}/{{ jar_file }}
+ExecStart=/usr/bin/java -jar {{ deploy_dir }}/build-{{ artifact_version }}.jar
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=5
+Environment=SPRING_PROFILES_ACTIVE={{ env | default('prod') }}
 
 [Install]
 WantedBy=multi-user.target
+

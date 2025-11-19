@@ -1,5 +1,5 @@
 app_name: legacy-java-app
-jar_file: legacy-java-app-1.0.0.jar
-s3_bucket: project1-javaapp-artifact-bucket
+jar_file: "build-{{ artifact_version }}.jar"
+s3_bucket: "project1-javaapp-bucket-{{ aws_region }}"
 deploy_dir: /opt/{{ app_name }}
 systemd_service: legacy-java-app.service

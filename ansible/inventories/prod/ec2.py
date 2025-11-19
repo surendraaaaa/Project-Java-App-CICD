@@ -25,10 +25,13 @@ def generate_inventory(instances):
     return inventory
 
 def main():
-    region = os.environ.get("AWS_REGION", "us-east-2")
+    region = os.environ.get("AWS_REGION")
     ec2 = boto3.client("ec2", region_name=region)
     response = ec2.describe_instances(
-    Filters=[{"Name": "tag:app", "Values": ["legacy-java-app"]}]
+    Filters=[
+        {"Name": "tag:Environment", "Values": ["prod"]}, 
+        {"Name": "tag:app", "Values": ["legacy-java-app"]} 
+    ]
 )
 
     inventory = generate_inventory(response["Reservations"])
@@ -41,16 +44,5 @@ if __name__ == "__main__":
 
 
 
-# plugin: amazon.aws.ec2
-# regions:
-#   - us-east-2
-#   - us-east-1
-# filters:
-#   "tag:App": "legacy-java-app"
-# hostnames:
-#   - public-ip-address
-# compose:
-#   ansible_user: ubuntu
-#   ansible_ssh_private_key_file: /home/ubuntu/.ssh/legacy-java-app-key
 
 

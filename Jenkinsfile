@@ -11,7 +11,7 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
-        SONAR_HOST_URL = "http://3.16.41.87:9000"
+        SONAR_HOST_URL = "http://3.150.125.216:9000"
     }
 
     stages {
@@ -30,7 +30,7 @@ pipeline {
             when { expression { return !params.ROLLBACK } }
             steps {
                 dir('legacy-java-app') {
-                    sh 'mvn clean install -DskipTests'
+                    sh "mvn clean package -DskipTests -Dbuild.number=${BUILD_NUMBER}"
                 }
             }
             post {
@@ -83,7 +83,7 @@ pipeline {
                 withAWS(credentials: 'aws-cred', region: params.S3_REGION) {
                     sh """
                     # Upload artifact
-                    aws s3 cp legacy-java-app/target/legacy-java-app-1.0.0.jar \
+                    aws s3 cp legacy-java-app/target/*.jar \
                     s3://${S3_BUCKET}/artifacts/build-${BUILD_NUMBER}.jar
 
                     # Upload Trivy report
@@ -118,21 +118,91 @@ pipeline {
         stage('Deploy via Ansible to Multiple Regions') {
             steps {
                 script {
-                    def ec2Regions = params.EC2_REGIONS.split(',')
+                    def ec2Regions = params.EC2_REGIONS
+                        .split(',')
+                        .collect { it.trim() }
+                        .findAll { it }  // removes empty regions
                     for (region in ec2Regions) {
                         stage("Deploy to EC2 in ${region.trim()}") {
-                            withEnv(["AWS_REGION=${region.trim()}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
-                                dir("${WORKSPACE}/ansible") {
-                                    sh """
-                                    ansible-playbook -i inventories/${params.ENV}/ec2.py playbooks/deploy.yml \
-                                    --extra-vars "artifact_version=${params.ROLLBACK ? params.ROLLBACK_VERSION : BUILD_NUMBER} env=${params.ENV} aws_region=${region.trim()}"
-                                    """
+                            withAWS(credentials: 'aws-cred', region: region.trim()) {
+                                withEnv(["AWS_REGION=${region.trim()}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
+                                    dir("${WORKSPACE}/ansible") {
+                                        sh """
+                                        chmod +x inventories/${params.ENV}/ec2.py
+                                        ansible-playbook -i inventories/${params.ENV}/ec2.py playbooks/deploy.yml \
+                                        --extra-vars "artifact_version=${params.ROLLBACK ? params.ROLLBACK_VERSION : BUILD_NUMBER} env=${params.ENV} aws_region=${region.trim()}"
+                                        """
+                                    }
                                 }
                             }
                         }
+
                     }
                 }
             }
         }
     }
+    post {
+        success {
+        emailext(
+            subject: "SUCCESS: Jenkins Pipeline '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+            to: "ashukumavat555@gmail.com",
+            mimeType: 'text/html',
+            body: """
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; background-color: #f6f6f6; color: #333; }
+                    .container { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);}
+                    .header { text-align: center; }
+                    .header h2 { color: #4CAF50; }
+                    .details { margin-top: 20px; }
+                    .details table { width: 100%; border-collapse: collapse; }
+                    .details th, .details td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+                    .footer { margin-top: 30px; font-size: 12px; color: #888; text-align: center; }
+                    a.button { background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; }
+                    a.button:hover { background-color: #45a049; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>Pipeline Success</h2>
+                        <p><strong>${env.JOB_NAME} [#${env.BUILD_NUMBER}]</strong></p>
+                    </div>
+                    <div class="details">
+                        <table>
+                            <tr>
+                                <th>Status</th>
+                                <td style="color: #4CAF50;"><strong>SUCCESS</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Build URL</th>
+                                <td><a class="button" href="${env.BUILD_URL}">View Build</a></td>
+                            </tr>
+                            <tr>
+                                <th>Triggered By</th>
+                                <td>${currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')[0]?.userName ?: 'Automated'}</td>
+                            </tr>
+                            <tr>
+                                <th>Start Time</th>
+                                <td>${new Date(currentBuild.startTimeInMillis).format('yyyy-MM-dd HH:mm:ss')}</td>
+                            </tr>
+                            <tr>
+                                <th>End Time</th>
+                                <td>${new Date().format('yyyy-MM-dd HH:mm:ss')}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated notification from Jenkins CI/CD system.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+        )
+    }
+}
 }

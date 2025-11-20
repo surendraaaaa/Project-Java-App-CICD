@@ -8,7 +8,7 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.3.0</version>
-        <relativePath/> <!-- lookup parent from the repository -->
+        <relativePath/>
     </parent>
 
     <groupId>com.example</groupId>
@@ -21,6 +21,8 @@
 
     <properties>
         <java.version>17</java.version>
+        <!-- Format for timestamp -->
+        <maven.build.timestamp.format>yyyyMMdd-HHmmss</maven.build.timestamp.format>
     </properties>
 
     <dependencies>
@@ -42,7 +44,6 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -52,6 +53,9 @@
     </dependencies>
 
     <build>
+        <!-- This ensures each build produces a unique JAR -->
+        <finalName>${project.artifactId}-${project.version}-build${build.number}-${maven.build.timestamp}</finalName>
+
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -59,5 +63,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>
